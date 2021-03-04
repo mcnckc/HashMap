@@ -1,0 +1,261 @@
+#include <algorithm>
+#include <functional>
+#include <iterator>
+#include <stdexcept>
+#include <vector>
+using std::vector;
+using std::pair;
+
+
+template<class KeyType, class ValueType>
+class Iterator : public std::iterator<std::forward_iterator_tag, pair<const KeyType, ValueType> > {
+    typedef pair<const KeyType, ValueType> value_type;
+    typename vector<vector<value_type>>::iterator id, last;
+    typename vector<value_type>::iterator pos;
+ public:
+    Iterator() {}
+    Iterator(typename vector<vector<value_type>>::iterator _id, typename vector<vector<value_type>>::iterator _last, typename vector<value_type>::iterator _pos) : id(_id), last(_last), pos(_pos) {
+        while(pos == id->end() && id != last) {
+            ++id, pos = id->begin();
+        }
+    }
+    Iterator(const Iterator& it) : id(it.id), last(it.last), pos(it.pos) {}
+    Iterator& operator++() {
+        if(id == last && pos == id->end()) return *this;
+        ++pos;
+        while(pos == id->end() && id != last) {
+            ++id, pos = id->begin();
+        }
+        return *this;
+    }
+    Iterator operator++(int) {
+        if(id == last && pos == id->end()) return *this;
+        Iterator tmp = *this;
+        ++pos;
+        while(pos == id->end() && id != last) {
+            ++id, pos = id->begin();
+        }
+        return tmp;
+    }
+    value_type& operator*() {
+        return *pos;
+    }
+    value_type* operator->() {
+        return &(*pos);
+    }
+    bool operator ==(const Iterator& a) const {
+        return (id == a.id && pos == a.pos);
+    }
+    bool operator !=(const Iterator& a) const {
+        return !(id == a.id && pos == a.pos);
+    }
+};
+
+template<class KeyType, class ValueType>
+class Const_iterator : public std::iterator<std::forward_iterator_tag, const pair<const KeyType, ValueType> > {
+    typedef const pair<const KeyType, ValueType> cvalue_type;
+    typedef pair<const KeyType, ValueType> value_type;
+    typename vector<vector<value_type>>::const_iterator id, last;
+    typename vector<value_type>::const_iterator pos;
+ public:
+    Const_iterator() {}
+    Const_iterator(typename vector<vector<value_type>>::const_iterator _id, typename vector<vector<value_type>>::const_iterator _last, typename vector<value_type>::const_iterator _pos) : id(_id), last(_last), pos(_pos) {
+        while(pos == id->end() && id != last) {
+            ++id, pos = id->begin();
+        }
+    }
+    Const_iterator(const Const_iterator& it) : id(it.id), last(it.last), pos(it.pos) {}
+    Const_iterator& operator++() {
+        if(id == last && pos == id->end()) return *this;
+        ++pos;
+        while(pos == id->end() && id != last) {
+            ++id, pos = id->begin();
+        }
+        return *this;
+    }
+    Const_iterator operator++(int) {
+        if(id == last && pos == id->end()) return *this;
+        Const_iterator tmp = *this;
+        ++pos;
+        while(pos == id->end() && id != last) {
+            ++id, pos = id->begin();
+        }
+        return tmp;
+    }
+    cvalue_type& operator*() const {
+        return *pos;
+    }
+    cvalue_type* operator->() const {
+        return &(*pos);
+    }
+    bool operator ==(const Const_iterator& a) const {
+        return (id == a.id && pos == a.pos);
+    }
+    bool operator !=(const Const_iterator& a) const {
+        return !(id == a.id && pos == a.pos);
+    }
+};
+
+
+template<class KeyType, class ValueType, class Hash = std::hash<KeyType> >
+class HashMap {
+    typedef pair<const KeyType, ValueType> value_type;
+    vector<vector<value_type>> table;
+    Hash hasher;
+    size_t amount = 0;
+    const size_t maxload = 2, minload = 8;
+    size_t find_pos(const KeyType &key) const {
+        size_t id = hasher(key) % table.size(), pos = 0;
+        for(value_type p : table[id]) {
+            if(p.first == key) {
+                break;
+            }
+            ++pos;
+        }
+        return pos;
+    }
+    void rehash() {
+        if(amount * maxload <= table.size() && amount * minload >= table.size()) return;
+        vector<value_type> values;
+        for(size_t id = 0; id < table.size(); ++id) {
+            for(const value_type& x : table[id]) {
+                values.push_back(x);
+            }
+        }
+        size_t nsz = (amount * maxload > table.size() ? 2 * table.size() : (table.size() + 1) / 2);
+        table.clear();
+        table.resize(nsz);
+        for (const value_type& p : values) {
+            size_t id = hasher(p.first) % table.size();
+            table[id].push_back(p);
+        }
+    }
+ public:
+    using iterator = Iterator<KeyType, ValueType>;
+    using const_iterator = Const_iterator<KeyType, ValueType>;
+    HashMap(const Hash& _hasher = Hash()) : hasher(_hasher) {
+        table.resize(1);
+    }
+    HashMap(const HashMap& other) {
+        hasher = other.hasher;
+        amount = other.amount;
+        table.resize(other.table.size());
+        for(size_t id = 0; id < other.table.size(); ++id) {
+            table[id].clear();
+            for(value_type x : other.table[id]) {
+                table[id].push_back(x);
+            }
+        }
+    }
+    HashMap& operator =(const HashMap& tother) {
+        HashMap other(tother);
+        hasher = other.hasher;
+        amount = other.amount;
+        table.resize(other.table.size());
+        for(size_t id = 0; id < other.table.size(); ++id) {
+            table[id].clear();
+            for(value_type x : other.table[id]) {
+                table[id].push_back(x);
+            }
+        }
+        return *this;
+    }
+    template<typename Iter>
+    HashMap(Iter first, Iter last, const Hash& _hasher = Hash()) : hasher(_hasher) {
+        Iter tf = first;
+        while (tf != last) {
+            ++amount, ++tf;
+        }
+        table.resize(2 * amount);
+        while (first != last) {
+            size_t id = hasher(first->first) % table.size();
+            table[id].push_back(*first++);
+        }
+    }
+    HashMap(std::initializer_list<value_type> l, const Hash& _hasher = Hash()) : hasher(_hasher) {
+        table.resize(2 * l.size());
+        for (value_type p : l) {
+            size_t id = hasher(p.first) % table.size();
+            table[id].push_back(p);
+            ++amount;
+        }
+    }
+    size_t size() const {
+        return amount;
+    }
+    bool empty() const {
+        return amount == 0;
+    }
+    Hash hash_function() const {
+        return hasher;
+    }
+    void insert(const value_type& p) {
+        size_t id = hasher(p.first) % table.size();
+        if (find_pos(p.first) == table[id].size()) {
+            table[id].push_back(p);
+            ++amount;
+            rehash();
+        }
+    }
+    void erase(const KeyType &key) {
+        size_t id = hasher(key) % table.size(), pos = find_pos(key);
+        if (pos != table[id].size()) {
+            vector<value_type> s;
+            for(size_t i = table[id].size() - 1; i > pos; --i) {
+                s.push_back(table[id][i]);
+                table[id].pop_back();
+            }
+            table[id].pop_back();
+            for(value_type x : s) table[id].push_back(x);
+            s.clear();
+            --amount;
+            rehash();
+        }
+    }
+    iterator begin() {
+        return iterator(table.begin(), table.begin() + table.size() - 1, table[0].begin());
+    }
+    const_iterator begin() const {
+        return const_iterator(table.begin(), table.begin() + table.size() - 1, table[0].begin());
+    }
+    iterator end() {
+        return iterator(table.begin() + table.size() - 1, table.begin() + table.size() - 1, (table.begin() + table.size() - 1)->end());
+    }
+    const_iterator end() const {
+        return const_iterator(table.begin() + table.size() - 1, table.begin() + table.size() - 1, (table.begin() + table.size() - 1)->end());
+    }
+    iterator find(const KeyType& key) {
+        size_t id = hasher(key) % table.size(), pos = find_pos(key);
+        if (pos != table[id].size()) {
+            return iterator(table.begin() + id, table.begin() + table.size() - 1, table[id].begin() + pos);
+        }
+        return end();
+    }
+    const_iterator find(const KeyType& key) const {
+        size_t id = hasher(key) % table.size(), pos = find_pos(key);
+        if (pos != table[id].size()) {
+            return const_iterator(table.begin() + id, table.begin() + table.size() - 1, table[id].begin() + pos);
+        }
+        return end();
+    }
+    ValueType& operator[](const KeyType& key) {
+        iterator it = find(key);
+        if(it == end()) {
+            insert({key, ValueType()});
+            it = find(key);
+        }
+        return it->second;
+    }
+    const ValueType& at(const KeyType& key) const {
+        const_iterator it = find(key);
+        if(it == end()) {
+            throw std::out_of_range("");
+        }
+        return it->second;
+    }
+    void clear() {
+        table.clear();
+        table.resize(1);
+        amount = 0;
+    }
+};
