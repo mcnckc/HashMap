@@ -6,20 +6,25 @@
 using std::vector;
 using std::pair;
 
-
+//Iterator class, to iterate through HashMap, made with builtin iterators to container which is used in HashMap realisation.
 template<class KeyType, class ValueType>
 class Iterator : public std::iterator<std::forward_iterator_tag, pair<const KeyType, ValueType> > {
+ private:
     typedef pair<const KeyType, ValueType> value_type;
     typename vector<vector<value_type>>::iterator id, last;
     typename vector<value_type>::iterator pos;
  public:
+    //default constructor
     Iterator() {}
+    //consturcts iterator from given iterators to builtin container, contained in HashMap.
     Iterator(typename vector<vector<value_type>>::iterator _id, typename vector<vector<value_type>>::iterator _last, typename vector<value_type>::iterator _pos) : id(_id), last(_last), pos(_pos) {
         while(pos == id->end() && id != last) {
             ++id, pos = id->begin();
         }
     }
+    //Copy constructor
     Iterator(const Iterator& it) : id(it.id), last(it.last), pos(it.pos) {}
+    //Increment, makes iterator point to the next element and return it's new version. O(1) amortisated.
     Iterator& operator++() {
         if(id == last && pos == id->end()) return *this;
         ++pos;
@@ -28,6 +33,7 @@ class Iterator : public std::iterator<std::forward_iterator_tag, pair<const KeyT
         }
         return *this;
     }
+    //Increment, but returns the old version of iterator. O(1) amortisated.
     Iterator operator++(int) {
         if(id == last && pos == id->end()) return *this;
         Iterator tmp = *this;
@@ -37,22 +43,28 @@ class Iterator : public std::iterator<std::forward_iterator_tag, pair<const KeyT
         }
         return tmp;
     }
+    //dereference operator, returns element, at which iterator points
     value_type& operator*() {
         return *pos;
     }
+    //convinient dereference, giving direct acces to any field of object obtained by iterator.
     value_type* operator->() {
         return &(*pos);
     }
+    //comparsion operator, returns true if iterators are pointing at the same element
     bool operator ==(const Iterator& a) const {
         return (id == a.id && pos == a.pos);
     }
+    //anticomparsion
     bool operator !=(const Iterator& a) const {
         return !(id == a.id && pos == a.pos);
     }
 };
 
+//Constant iterator similar to usual iterator, but doesn't allow to change object obtained by iterator.
 template<class KeyType, class ValueType>
 class Const_iterator : public std::iterator<std::forward_iterator_tag, const pair<const KeyType, ValueType> > {
+ private:
     typedef const pair<const KeyType, ValueType> cvalue_type;
     typedef pair<const KeyType, ValueType> value_type;
     typename vector<vector<value_type>>::const_iterator id, last;
@@ -96,14 +108,16 @@ class Const_iterator : public std::iterator<std::forward_iterator_tag, const pai
     }
 };
 
-
+//HashTable with chain method, elements are stored in std::vector. Doubles array size when load excesses half of array size. If load factor is less than 1/8 array size is twice derceased.
 template<class KeyType, class ValueType, class Hash = std::hash<KeyType> >
 class HashMap {
+ private:
     typedef pair<const KeyType, ValueType> value_type;
     vector<vector<value_type>> table;
     Hash hasher;
     size_t amount = 0;
-    const size_t maxload = 2, minload = 8;
+    constexpr size_t maxload = 2, minload = 8;
+    //method used to find specific key in the chain. Returns position if found, chain size otherwise. O(chain_length). 
     size_t find_pos(const KeyType &key) const {
         size_t id = hasher(key) % table.size(), pos = 0;
         for(value_type p : table[id]) {
@@ -114,6 +128,7 @@ class HashMap {
         }
         return pos;
     }
+    //Rebuilds table by specified rules if load factor is not between 1/8 and 1/2. O(table size).
     void rehash() {
         if(amount * maxload <= table.size() && amount * minload >= table.size()) return;
         vector<value_type> values;
@@ -133,9 +148,11 @@ class HashMap {
  public:
     using iterator = Iterator<KeyType, ValueType>;
     using const_iterator = Const_iterator<KeyType, ValueType>;
+    //constructs empty Hash table with given hash function.
     HashMap(const Hash& _hasher = Hash()) : hasher(_hasher) {
         table.resize(1);
     }
+    //copy constructor.
     HashMap(const HashMap& other) {
         hasher = other.hasher;
         amount = other.amount;
@@ -147,6 +164,7 @@ class HashMap {
             }
         }
     }
+    //operator=, returns reference to new version.
     HashMap& operator =(const HashMap& tother) {
         HashMap other(tother);
         hasher = other.hasher;
@@ -160,6 +178,7 @@ class HashMap {
         }
         return *this;
     }
+    //constucts hash table from iterable container.
     template<typename Iter>
     HashMap(Iter first, Iter last, const Hash& _hasher = Hash()) : hasher(_hasher) {
         Iter tf = first;
@@ -172,6 +191,7 @@ class HashMap {
             table[id].push_back(*first++);
         }
     }
+    //constructs Hash table from std::initializer_list.
     HashMap(std::initializer_list<value_type> l, const Hash& _hasher = Hash()) : hasher(_hasher) {
         table.resize(2 * l.size());
         for (value_type p : l) {
@@ -189,6 +209,7 @@ class HashMap {
     Hash hash_function() const {
         return hasher;
     }
+    //insert given element in container, O(1) expected.
     void insert(const value_type& p) {
         size_t id = hasher(p.first) % table.size();
         if (find_pos(p.first) == table[id].size()) {
@@ -197,6 +218,7 @@ class HashMap {
             rehash();
         }
     }
+    //erase element with given key if such exists. O(1) expected.
     void erase(const KeyType &key) {
         size_t id = hasher(key) % table.size(), pos = find_pos(key);
         if (pos != table[id].size()) {
@@ -224,6 +246,7 @@ class HashMap {
     const_iterator end() const {
         return const_iterator(table.begin() + table.size() - 1, table.begin() + table.size() - 1, (table.begin() + table.size() - 1)->end());
     }
+    //returns iterator to element with given key, returns end() otherwise. O(1) expected.
     iterator find(const KeyType& key) {
         size_t id = hasher(key) % table.size(), pos = find_pos(key);
         if (pos != table[id].size()) {
@@ -231,6 +254,7 @@ class HashMap {
         }
         return end();
     }
+    //returns constanst iterator to element with given key, through which elemnt can't be changed, returns end() otherwise. O(1) expected.
     const_iterator find(const KeyType& key) const {
         size_t id = hasher(key) % table.size(), pos = find_pos(key);
         if (pos != table[id].size()) {
@@ -238,7 +262,8 @@ class HashMap {
         }
         return end();
     }
-    ValueType& operator[](const KeyType& key) {
+    //this operator takes key, and returns reference to object with such key, located in container. If table doesnt't contain such key, element with such key and default value is added. O(1) expected.
+    ValueType& operator[](const KeyType& key) { 
         iterator it = find(key);
         if(it == end()) {
             insert({key, ValueType()});
@@ -246,6 +271,7 @@ class HashMap {
         }
         return it->second;
     }
+    //return constant reference to the element with given key, which doesn't allow to change element. If no such key contained in table, throws exception std::out_of_range. O(1) expected.
     const ValueType& at(const KeyType& key) const {
         const_iterator it = find(key);
         if(it == end()) {
@@ -253,6 +279,7 @@ class HashMap {
         }
         return it->second;
     }
+    //make this table empty.
     void clear() {
         table.clear();
         table.resize(1);
