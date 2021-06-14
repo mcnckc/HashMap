@@ -9,11 +9,10 @@ using std::pair;
 //Iterator class, to iterate through HashMap, made with builtin iterators to container which is used in HashMap realisation.
 template<class KeyType, class ValueType>
 class Iterator : public std::iterator<std::forward_iterator_tag, pair<const KeyType, ValueType> > {
- private:
+ public:
     typedef pair<const KeyType, ValueType> value_type;
     typename vector<vector<value_type>>::iterator id, last;
     typename vector<value_type>::iterator pos;
- public:
     //default constructor
     Iterator() {}
     //consturcts iterator from given iterators to builtin container, contained in HashMap.
@@ -64,12 +63,11 @@ class Iterator : public std::iterator<std::forward_iterator_tag, pair<const KeyT
 //Constant iterator similar to usual iterator, but doesn't allow to change object obtained by iterator.
 template<class KeyType, class ValueType>
 class Const_iterator : public std::iterator<std::forward_iterator_tag, const pair<const KeyType, ValueType> > {
- private:
+ public:
     typedef const pair<const KeyType, ValueType> cvalue_type;
     typedef pair<const KeyType, ValueType> value_type;
     typename vector<vector<value_type>>::const_iterator id, last;
     typename vector<value_type>::const_iterator pos;
- public:
     Const_iterator() {}
     Const_iterator(typename vector<vector<value_type>>::const_iterator _id, typename vector<vector<value_type>>::const_iterator _last, typename vector<value_type>::const_iterator _pos) : id(_id), last(_last), pos(_pos) {
         while(pos == id->end() && id != last) {
@@ -108,44 +106,14 @@ class Const_iterator : public std::iterator<std::forward_iterator_tag, const pai
     }
 };
 
-//HashTable with chain method, elements are stored in std::vector. Doubles array size when load excesses half of array size. If load factor is less than 1/8 array size is twice derceased.
+//HashTable with chain method, elements are stored in std::vector.
+//https://ru.wikipedia.org/wiki/%D0%A5%D0%B5%D1%88-%D1%82%D0%B0%D0%B1%D0%BB%D0%B8%D1%86%D0%B0
+//https://en.wikipedia.org/wiki/Hash_table
+//Makes table twice bigger/smaller if load factor is too big/small.
 template<class KeyType, class ValueType, class Hash = std::hash<KeyType> >
 class HashMap {
- private:
-    typedef pair<const KeyType, ValueType> value_type;
-    vector<vector<value_type>> table;
-    Hash hasher;
-    size_t amount = 0;
-    constexpr size_t maxload = 2, minload = 8;
-    //method used to find specific key in the chain. Returns position if found, chain size otherwise. O(chain_length). 
-    size_t find_pos(const KeyType &key) const {
-        size_t id = hasher(key) % table.size(), pos = 0;
-        for(value_type p : table[id]) {
-            if(p.first == key) {
-                break;
-            }
-            ++pos;
-        }
-        return pos;
-    }
-    //Rebuilds table by specified rules if load factor is not between 1/8 and 1/2. O(table size).
-    void rehash() {
-        if(amount * maxload <= table.size() && amount * minload >= table.size()) return;
-        vector<value_type> values;
-        for(size_t id = 0; id < table.size(); ++id) {
-            for(const value_type& x : table[id]) {
-                values.push_back(x);
-            }
-        }
-        size_t nsz = (amount * maxload > table.size() ? 2 * table.size() : (table.size() + 1) / 2);
-        table.clear();
-        table.resize(nsz);
-        for (const value_type& p : values) {
-            size_t id = hasher(p.first) % table.size();
-            table[id].push_back(p);
-        }
-    }
  public:
+    typedef pair<const KeyType, ValueType> value_type;
     using iterator = Iterator<KeyType, ValueType>;
     using const_iterator = Const_iterator<KeyType, ValueType>;
     //constructs empty Hash table with given hash function.
@@ -155,11 +123,11 @@ class HashMap {
     //copy constructor.
     HashMap(const HashMap& other) {
         hasher = other.hasher;
-        amount = other.amount;
+        number = other.number;
         table.resize(other.table.size());
         for(size_t id = 0; id < other.table.size(); ++id) {
             table[id].clear();
-            for(value_type x : other.table[id]) {
+            for(const value_type& x : other.table[id]) {
                 table[id].push_back(x);
             }
         }
@@ -168,7 +136,7 @@ class HashMap {
     HashMap& operator =(const HashMap& tother) {
         HashMap other(tother);
         hasher = other.hasher;
-        amount = other.amount;
+        number = other.number;
         table.resize(other.table.size());
         for(size_t id = 0; id < other.table.size(); ++id) {
             table[id].clear();
@@ -180,31 +148,33 @@ class HashMap {
     }
     //constucts hash table from iterable container.
     template<typename Iter>
-    HashMap(Iter first, Iter last, const Hash& _hasher = Hash()) : hasher(_hasher) {
-        Iter tf = first;
-        while (tf != last) {
-            ++amount, ++tf;
+    HashMap(Iter first_element, Iter last_element, const Hash& _hasher = Hash()) : hasher(_hasher) {
+        Iter tf = first_element;
+        while (tf != last_element) {
+            ++number;
+            ++tf;
         }
-        table.resize(2 * amount);
-        while (first != last) {
-            size_t id = hasher(first->first) % table.size();
-            table[id].push_back(*first++);
+        table.resize(maxload * number);
+        while (first_element != last_element) {
+            size_t id = hasher(first_element->first) % table.size();
+            table[id].push_back(*first_element);
+            ++first_element;
         }
     }
     //constructs Hash table from std::initializer_list.
     HashMap(std::initializer_list<value_type> l, const Hash& _hasher = Hash()) : hasher(_hasher) {
-        table.resize(2 * l.size());
+        table.resize(maxload * l.size());
         for (value_type p : l) {
             size_t id = hasher(p.first) % table.size();
             table[id].push_back(p);
-            ++amount;
+            ++number;
         }
     }
     size_t size() const {
-        return amount;
+        return number;
     }
     bool empty() const {
-        return amount == 0;
+        return number == 0;
     }
     Hash hash_function() const {
         return hasher;
@@ -214,8 +184,8 @@ class HashMap {
         size_t id = hasher(p.first) % table.size();
         if (find_pos(p.first) == table[id].size()) {
             table[id].push_back(p);
-            ++amount;
-            rehash();
+            ++number;
+            fit_load();
         }
     }
     //erase element with given key if such exists. O(1) expected.
@@ -223,15 +193,15 @@ class HashMap {
         size_t id = hasher(key) % table.size(), pos = find_pos(key);
         if (pos != table[id].size()) {
             vector<value_type> s;
-            for(size_t i = table[id].size() - 1; i > pos; --i) {
+            for(size_t i = table[id].size() - (size_t)1; i > pos; --i) {
                 s.push_back(table[id][i]);
                 table[id].pop_back();
             }
             table[id].pop_back();
             for(value_type x : s) table[id].push_back(x);
             s.clear();
-            --amount;
-            rehash();
+            --number;
+            fit_load();
         }
     }
     iterator begin() {
@@ -263,7 +233,7 @@ class HashMap {
         return end();
     }
     //this operator takes key, and returns reference to object with such key, located in container. If table doesnt't contain such key, element with such key and default value is added. O(1) expected.
-    ValueType& operator[](const KeyType& key) { 
+    ValueType& operator[](const KeyType& key) {
         iterator it = find(key);
         if(it == end()) {
             insert({key, ValueType()});
@@ -283,6 +253,47 @@ class HashMap {
     void clear() {
         table.clear();
         table.resize(1);
-        amount = 0;
+        number = 0;
+    }
+ private:
+    vector<vector<value_type>> table;
+    Hash hasher;
+    size_t number = 0;
+    constexpr static size_t maxload = 1;
+    constexpr static size_t minload = 8;
+    //method used to find specific key in the chain. Returns position if found, chain size otherwise. O(chain_length).
+    size_t find_pos(const KeyType &key) const {
+        size_t id = hasher(key) % table.size(), pos = 0;
+        for(value_type p : table[id]) {
+            if(p.first == key) {
+                break;
+            }
+            ++pos;
+        }
+        return pos;
+    }
+    //Rebuilds table by specified rules if load factor is not between 1/8 and 1/2. O(table size).
+    void fit_load() {
+        if(number * maxload <= table.size() && number * minload >= table.size()) {
+            return;
+        }
+        vector<value_type> values;
+        for(size_t id = 0; id < table.size(); ++id) {
+            for(const value_type& x : table[id]) {
+                values.push_back(x);
+            }
+        }
+        size_t nsz;
+        if (number * maxload > table.size()) {
+            nsz = 2 * table.size();
+        } else {
+            nsz = (table.size() + 1) / 2;
+        }
+        table.clear();
+        table.resize(nsz);
+        for (const value_type& p : values) {
+            size_t id = hasher(p.first) % table.size();
+            table[id].push_back(p);
+        }
     }
 };
