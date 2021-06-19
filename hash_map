@@ -107,7 +107,6 @@ class Const_iterator : public std::iterator<std::forward_iterator_tag, const pai
 };
 
 //HashTable with chain method, elements are stored in std::vector.
-//https://ru.wikipedia.org/wiki/%D0%A5%D0%B5%D1%88-%D1%82%D0%B0%D0%B1%D0%BB%D0%B8%D1%86%D0%B0
 //https://en.wikipedia.org/wiki/Hash_table
 //Makes table twice bigger/smaller if load factor is too big/small.
 template<class KeyType, class ValueType, class Hash = std::hash<KeyType> >
